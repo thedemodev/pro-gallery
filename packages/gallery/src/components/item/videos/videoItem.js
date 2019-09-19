@@ -3,39 +3,23 @@ import utils from '../../../common/utils';
 import window from '../../../common/window/windowWrapper';
 import { GalleryComponent } from '../../galleryComponent';
 import EVENTS from '../../../common/constants/events';
+import VIDEO_PLAYERTYPES from '../../../common/constants/videoPlayerTypes';
 import { URL_TYPES, URL_SIZES } from '../../../common/constants/urlTypes';
 
 class VideoItem extends GalleryComponent {
   constructor(props) {
     super(props);
-
+    
     this.pause = this.pause.bind(this);
     this.play = this.play.bind(this);
     this.state = {
       playedOnce: false,
       playing: false,
-      reactPlayerLoaded: false,
+      playerLoaded: false,
       vimeoPlayerLoaded: false,
     };
-    if (!utils.isSSR()) {
-      if (!(window && window.ReactPlayer)) {
-        import('react-player').then(ReactPlayer => {
-          window.ReactPlayer = ReactPlayer.default;
-          this.setState({ reactPlayerLoaded: true });
-        });
-      }
-      if (
-        //Vimeo player must be loaded by us, problem with requireJS
-        !(window && window.Vimeo) &&
-        props.videoUrl &&
-        props.videoUrl.includes('vimeo.com')
-      ) {
-        import('@vimeo/player').then(Player => {
-          window.Vimeo = { Player: Player.default };
-          this.setState({ vimeoPlayerLoaded: true });
-        });
-      }
-    }
+    this.playerType = this.parseUrltoVideoPlayerType(props.videoUrl);
+
   }
 
   componentWillReceiveProps(nextProps) {
@@ -49,6 +33,9 @@ class VideoItem extends GalleryComponent {
       this.fixIFrameTabIndexIfNeeded();
     }
   }
+  componentDidMount() {
+    this.loadNeededPlayer();
+  }
 
   play() {
     this.props.playVideo(this.props.idx);
@@ -57,22 +44,76 @@ class VideoItem extends GalleryComponent {
   pause() {
     this.props.pauseVideo();
   }
+  
+  loadNeededPlayer(){
+      switch(this.playerType) { //We import only youtube/vimeo/file players when needed. this is for faster loading
+        case VIDEO_PLAYERTYPES.YOUTUBE:
+          if (!(window && window[VIDEO_PLAYERTYPES.YOUTUBE + '_reactPlayer'])) {
+            import(/* webpackChunkName: "YouTubePlayer" */`react-player/lib/players/YouTube`).then(Player => {
+              window[VIDEO_PLAYERTYPES.YOUTUBE + '_reactPlayer'] = Player.default;
+              this.setState({ playerLoaded: true });
+            });
+          }
+          break;
+        case VIDEO_PLAYERTYPES.VIMEO:
+          if (!(window && window[VIDEO_PLAYERTYPES.VIMEO + '_reactPlayer'])) {
+           import(/* webpackChunkName: "VimeoPlayer" */`react-player/lib/players/Vimeo`).then(Player => {
+              window[VIDEO_PLAYERTYPES.VIMEO + '_reactPlayer'] = Player.default;
+              this.setState({ playerLoaded: true });
+          });
+        }
+        break;
+        case VIDEO_PLAYERTYPES.FILE:
+        if (!(window && window[VIDEO_PLAYERTYPES.FILE + '_reactPlayer'])) {
+         import(/* webpackChunkName: "FilePlayer" */`react-player/lib/players/FilePlayer`).then(Player => {
+            window[VIDEO_PLAYERTYPES.FILE + '_reactPlayer'] = Player.default;
+            this.setState({ playerLoaded: true });
+        });
+      }
+      }
+        
+      if (
+        //Vimeo's player for react-player must be loaded by us, problem with requireJS
+        !(window && window.Vimeo) && this.playerType === 'Vimeo'
+      ) {
+        import(/* webpackChunkName: "VimeoAddon" */'@vimeo/player').then(Player => {
+          window.Vimeo = { Player: Player.default };
+          this.setState({ vimeoPlayerLoaded: true });
+        });
+      }
+    
+  }
+  parseUrltoVideoPlayerType(url){
+    const MATCH_YOUTUBE = /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})|youtube\.com\/playlist\?list=/
+    const MATCH_VIMEO = /vimeo\.com\/.+/
 
+    const canPlayYoutube = testUrl => MATCH_YOUTUBE.test(testUrl)
+    const canPlayVimeo = testUrl => MATCH_VIMEO.test(testUrl)
+
+      if (canPlayYoutube(url)) {
+        return VIDEO_PLAYERTYPES.YOUTUBE
+      } else if (canPlayVimeo(url)){
+        return VIDEO_PLAYERTYPES.VIMEO
+      } else {
+        return VIDEO_PLAYERTYPES.FILE
+      }
+    
+  }
   //-----------------------------------------| UTILS |--------------------------------------------//
   createPlayerElement() {
     //video dimensions are for videos in grid fill - placing the video with negative margins to crop into a square
-    if (!(window && window.ReactPlayer)) {
+    if (!(window && window[this.playerType + '_reactPlayer'])) {
       return null;
     }
-    const PlayerElement = window.ReactPlayer;
+    const PlayerElement = window[this.playerType + '_reactPlayer'];
     const isWiderThenContainer = this.props.style.ratio >= this.props.cubeRatio;
-
+    
     const videoDimensionsCss = {
       width: isWiderThenContainer ? '100%' : 'auto',
       height: isWiderThenContainer ? 'auto' : '100%',
       opacity: this.props.loadingStatus ? '1' : '0',
     };
-
+    
     if (
       this.props.styleParams.cubeImages &&
       this.props.styleParams.cubeType === 'fill'
@@ -96,22 +137,22 @@ class VideoItem extends GalleryComponent {
       : this.props.createUrl(URL_SIZES.RESIZED, URL_TYPES.VIDEO);
     return (
       <PlayerElement
-        className={'gallery-item-visible video gallery-item'}
-        id={`video-${this.props.id}`}
-        width="100%"
-        height="100%"
-        url={url}
-        alt={this.props.alt ? this.props.alt : 'untitled video'}
-        loop={!!this.props.styleParams.videoLoop}
-        ref={player => (this.video = player)}
-        volume={this.props.styleParams.videoSound ? 0.8 : 0}
-        playing={this.props.playing}
-        onEnded={() => {
-          this.setState({ playing: false });
-          this.props.actions.eventsListener(EVENTS.VIDEO_ENDED, this.props);
-        }}
-        onPause={() => {
-          this.setState({ playing: false });
+      className={'gallery-item-visible video gallery-item'}
+      id={`video-${this.props.id}`}
+      width="100%"
+      height="100%"
+      url={url}
+      alt={this.props.alt ? this.props.alt : 'untitled video'}
+      loop={!!this.props.styleParams.videoLoop}
+      ref={player => (this.video = player)}
+      volume={this.props.styleParams.videoSound ? 0.8 : 0}
+      playing={this.props.playing}
+      onEnded={() => {
+        this.setState({ playing: false });
+        this.props.actions.eventsListener(EVENTS.VIDEO_ENDED, this.props);
+      }}
+      onPause={() => {
+        this.setState({ playing: false });
         }}
         playbackRate={Number(this.props.styleParams.videoSpeed) || 1}
         onPlay={() => {
