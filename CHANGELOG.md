@@ -1,3 +1,9 @@
+## [v1.5.49](https://pro-gallery-1-5-49.surge.sh) (17/12/2019)
+
+#### GALLERY
+ -  Added MAIN_COLOR to imageLoading options (SP imageLoadingMode and imageLoaindWithColorMode)
+
+---
 ## [v1.5.48](https://pro-gallery-1-5-48.surge.sh) (05/12/2019)
  
 #### GALLERY
