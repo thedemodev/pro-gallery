@@ -132,15 +132,15 @@ describe('Video Item ', () => {
     );
   });
 
-  it('video controls should appear if not hidePlay', () => {
-    Object.assign(sampleItemViewProps, {
-      hidePlay: false,
+  it('video controls should appear if showVideoPlayButton', () => {
+    Object.assign(sampleItemViewProps.styleParams, {
+      showVideoPlayButton: true,
     });
     driver.mount(VideoItem, sampleItemViewProps);
     expect(driver.find.hook('play-triangle').length).to.equal(1);
     expect(driver.find.hook('play-background').length).to.equal(1);
-    Object.assign(sampleItemViewProps, {
-      hidePlay: true,
+    Object.assign(sampleItemViewProps.styleParams, {
+      showVideoPlayButton: false,
     });
     driver.mount(VideoItem, sampleItemViewProps);
     expect(driver.find.hook('play-triangle').length).to.equal(0);
